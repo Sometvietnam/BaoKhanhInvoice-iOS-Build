@@ -92,10 +92,24 @@ struct ContentView: View {
                                     .font(.title3)
                             }
                         }
-                        TextField("Giá tiền", text: $item.priceText)
+                        HStack(spacing: 8) {
+                            TextField("SL", text: Binding(
+                                get: { String(max(1, $item.wrappedValue.quantity)) },
+                                set: { newValue in
+                                    let digits = newValue.filter { $0.isNumber }
+                                    $item.wrappedValue.quantity = max(1, Int(digits) ?? 1)
+                                }
+                            ))
                             .keyboardType(.numberPad)
                             .textFieldStyle(.roundedBorder)
                             .focused($inputFocused)
+                            .frame(width: 76)
+
+                            TextField("Giá tiền", text: $item.priceText)
+                                .keyboardType(.numberPad)
+                                .textFieldStyle(.roundedBorder)
+                                .focused($inputFocused)
+                        }
                     }
                     .padding(10)
                     .background(Color(.secondarySystemGroupedBackground))
@@ -297,7 +311,7 @@ struct ContentView: View {
         let request = CreateInvoiceRequest(
             customer_name: customerName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Khách lẻ" : customerName,
             discount: discount,
-            items: rows.map { CreateInvoiceItem(name: $0.name.isEmpty ? "Sản phẩm" : $0.name, quantity: 1, price: $0.price) }
+            items: rows.map { CreateInvoiceItem(name: $0.name.isEmpty ? "Sản phẩm" : $0.name, quantity: max(1, $0.quantity), price: $0.price) }
         )
 
         do {
@@ -386,7 +400,7 @@ struct ContentView: View {
             order_code: invoice.order_code,
             invoice_date_vn: invoice.invoice_date_vn ?? invoiceDateText,
             customer_name: customerName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Khách lẻ" : customerName,
-            items: validItems.map { SavedInvoiceItem(name: $0.name.isEmpty ? "Sản phẩm" : $0.name, quantity: 1, price: $0.price) },
+            items: validItems.map { SavedInvoiceItem(name: $0.name.isEmpty ? "Sản phẩm" : $0.name, quantity: max(1, $0.quantity), price: $0.price) },
             subtotal: subtotal,
             discount: discount,
             total_amount: payable,
@@ -608,7 +622,7 @@ private struct InvoiceItemRow: View {
     var body: some View {
         HStack(spacing: 0) {
             TableCell(text: item.name.isEmpty ? "Sản phẩm" : item.name, width: nil, align: .leading)
-            TableCell(text: "1", width: 34, align: .center)
+            TableCell(text: String(max(1, item.quantity)), width: 34, align: .center)
             TableCell(text: Money.format(item.price), width: 82, align: .trailing)
             TableCell(text: Money.format(item.lineTotal), width: 92, align: .trailing)
         }
