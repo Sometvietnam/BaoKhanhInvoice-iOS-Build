@@ -15,6 +15,60 @@ struct LocalInvoiceItem: Identifiable, Equatable {
     }
 }
 
+struct SavedInvoiceItem: Codable, Equatable {
+    var name: String
+    var quantity: Int
+    var price: Int
+
+    var lineTotal: Int {
+        max(1, quantity) * price
+    }
+}
+
+struct SavedInvoiceRecord: Codable, Identifiable, Equatable {
+    var id: String { invoice_code }
+    var invoice_code: String
+    var order_code: String
+    var invoice_date_vn: String?
+    var customer_name: String
+    var items: [SavedInvoiceItem]
+    var subtotal: Int
+    var discount: Int
+    var total_amount: Int
+    var payment_status: String
+    var status_text: String?
+    var paid_at_vn: String?
+    var qr_text: String?
+    var saved_at: String
+
+    func toInvoiceInfo() -> InvoiceInfo {
+        InvoiceInfo(
+            id: nil,
+            invoice_code: invoice_code,
+            order_code: order_code,
+            invoice_date_vn: invoice_date_vn,
+            subtotal: subtotal,
+            discount: discount,
+            total_amount: total_amount,
+            payment_status: payment_status,
+            status_text: status_text,
+            paid_at: nil,
+            paid_at_vn: paid_at_vn
+        )
+    }
+
+    func toLocalItems() -> [LocalInvoiceItem] {
+        let rows = items.map { item in
+            LocalInvoiceItem(
+                name: item.name,
+                priceText: String(item.price),
+                quantity: max(1, item.quantity)
+            )
+        }
+        return rows.isEmpty ? [LocalInvoiceItem(name: "", priceText: "")] : rows
+    }
+}
+
 struct CreateInvoiceRequest: Encodable {
     let customer_name: String
     let discount: Int
@@ -39,7 +93,7 @@ struct PaymentInfo: Decodable {
     let qrCode: String?
 }
 
-struct InvoiceInfo: Decodable {
+struct InvoiceInfo: Decodable, Equatable {
     let id: Int?
     let invoice_code: String
     let order_code: String
@@ -54,6 +108,32 @@ struct InvoiceInfo: Decodable {
 
     enum CodingKeys: String, CodingKey {
         case id, invoice_code, order_code, invoice_date_vn, subtotal, discount, total_amount, payment_status, status_text, paid_at, paid_at_vn
+    }
+
+    init(
+        id: Int?,
+        invoice_code: String,
+        order_code: String,
+        invoice_date_vn: String?,
+        subtotal: Int?,
+        discount: Int?,
+        total_amount: Int,
+        payment_status: String,
+        status_text: String?,
+        paid_at: String?,
+        paid_at_vn: String?
+    ) {
+        self.id = id
+        self.invoice_code = invoice_code
+        self.order_code = order_code
+        self.invoice_date_vn = invoice_date_vn
+        self.subtotal = subtotal
+        self.discount = discount
+        self.total_amount = total_amount
+        self.payment_status = payment_status
+        self.status_text = status_text
+        self.paid_at = paid_at
+        self.paid_at_vn = paid_at_vn
     }
 
     init(from decoder: Decoder) throws {
