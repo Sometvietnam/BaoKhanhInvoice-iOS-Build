@@ -29,6 +29,9 @@
     <key>LSRequiresIPhoneOS</key>
     <true/>
 
+    <key>NSPhotoLibraryAddUsageDescription</key>
+    <string>Ứng dụng cần quyền lưu ảnh hóa đơn vào Ảnh.</string>
+
     <key>UILaunchScreen</key>
     <dict/>
 
