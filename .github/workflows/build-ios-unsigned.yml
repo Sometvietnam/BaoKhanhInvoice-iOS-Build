@@ -1,0 +1,51 @@
+name: Build Bao Khanh iOS Unsigned IPA
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-ios-unsigned:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Build app without signing
+        run: |
+          xcodebuild clean build \
+            -project "BaoKhanhInvoice.xcodeproj" \
+            -scheme "BaoKhanhInvoice" \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath "build/DerivedData" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY=""
+
+      - name: Package unsigned IPA
+        run: |
+          APP_PATH="build/DerivedData/Build/Products/Release-iphoneos/BaoKhanhInvoice.app"
+
+          if [ ! -d "$APP_PATH" ]; then
+            echo "Không tìm thấy app tại: $APP_PATH"
+            find build/DerivedData/Build/Products -maxdepth 3 -type d
+            exit 1
+          fi
+
+          mkdir -p build/ipa/Payload
+          cp -R "$APP_PATH" build/ipa/Payload/
+          cd build/ipa
+          zip -r BaoKhanhInvoice-unsigned.ipa Payload
+
+      - name: Upload unsigned IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: BaoKhanhInvoice-Unsigned-IPA
+          path: build/ipa/BaoKhanhInvoice-unsigned.ipa
