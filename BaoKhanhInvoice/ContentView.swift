@@ -349,16 +349,15 @@ struct ContentView: View {
                         }
                         HStack(spacing: 8) {
                             TextField("SL", text: Binding(
-                                get: { String(max(1, $item.wrappedValue.quantity)) },
+                                get: { $item.wrappedValue.quantityText },
                                 set: { newValue in
-                                    let digits = newValue.filter { $0.isNumber }
-                                    $item.wrappedValue.quantity = max(1, Int(digits) ?? 1)
+                                    $item.wrappedValue.quantityText = Quantity.sanitizeInput(newValue)
                                 }
                             ))
-                            .keyboardType(.numberPad)
+                            .keyboardType(.decimalPad)
                             .textFieldStyle(.roundedBorder)
                             .focused($inputFocused)
-                            .frame(width: 76)
+                            .frame(width: 82)
 
                             TextField("Giá tiền", text: $item.priceText)
                                 .keyboardType(.numberPad)
@@ -509,7 +508,7 @@ struct ContentView: View {
             customer_name: normalizedCustomerName,
             customer_phone: normalizedCustomerPhone,
             discount: discount,
-            items: rows.map { CreateInvoiceItem(name: $0.name.isEmpty ? "Sản phẩm" : $0.name, quantity: max(1, $0.quantity), price: $0.price) }
+            items: rows.map { CreateInvoiceItem(name: $0.name.isEmpty ? "Sản phẩm" : $0.name, quantity: $0.safeQuantity, price: $0.price) }
         )
 
         do {
@@ -547,7 +546,7 @@ struct ContentView: View {
             customer_name: normalizedCustomerName,
             customer_phone: normalizedCustomerPhone,
             discount: discount,
-            items: rows.map { CreateInvoiceItem(name: $0.name.isEmpty ? "Sản phẩm" : $0.name, quantity: max(1, $0.quantity), price: $0.price) }
+            items: rows.map { CreateInvoiceItem(name: $0.name.isEmpty ? "Sản phẩm" : $0.name, quantity: $0.safeQuantity, price: $0.price) }
         )
 
         do {
@@ -572,6 +571,10 @@ struct ContentView: View {
         }
         guard payable > 0 else {
             statusMessage = "Tổng thanh toán phải lớn hơn 0."
+            return false
+        }
+        guard rows.allSatisfy({ $0.quantity > 0 }) else {
+            statusMessage = "Số lượng phải lớn hơn 0. Bạn có thể nhập số lẻ như 1,5 hoặc 1.5."
             return false
         }
         return true
@@ -668,7 +671,7 @@ struct ContentView: View {
             invoice_date_vn: invoice.invoice_date_vn ?? invoiceDateText,
             customer_name: normalizedCustomerName,
             customer_phone: normalizedCustomerPhone,
-            items: validItems.map { SavedInvoiceItem(name: $0.name.isEmpty ? "Sản phẩm" : $0.name, quantity: max(1, $0.quantity), price: $0.price) },
+            items: validItems.map { SavedInvoiceItem(name: $0.name.isEmpty ? "Sản phẩm" : $0.name, quantity: $0.safeQuantity, price: $0.price) },
             subtotal: subtotal,
             discount: discount,
             total_amount: payable,
@@ -1291,7 +1294,7 @@ private struct InvoiceHeaderRow: View {
     var body: some View {
         HStack(spacing: 0) {
             TableCell(text: "Tên hàng", width: nil, bold: true, align: .leading)
-            TableCell(text: "SL", width: 34, bold: true, align: .center)
+            TableCell(text: "SL", width: 46, bold: true, align: .center)
             TableCell(text: "Đơn giá", width: 82, bold: true, align: .trailing)
             TableCell(text: "Thành tiền", width: 92, bold: true, align: .trailing)
         }
@@ -1305,7 +1308,7 @@ private struct InvoiceItemRow: View {
     var body: some View {
         HStack(spacing: 0) {
             TableCell(text: item.name.isEmpty ? "Sản phẩm" : item.name, width: nil, align: .leading)
-            TableCell(text: String(max(1, item.quantity)), width: 34, align: .center)
+            TableCell(text: Quantity.format(item.quantity), width: 46, align: .center)
             TableCell(text: Money.format(item.price), width: 82, align: .trailing)
             TableCell(text: Money.format(item.lineTotal), width: 92, align: .trailing)
         }
