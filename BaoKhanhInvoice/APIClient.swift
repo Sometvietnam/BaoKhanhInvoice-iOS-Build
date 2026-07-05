@@ -5,6 +5,14 @@ final class APIClient {
         try await post(apiBase: apiBase, token: token, path: "/create_invoice.php", body: request)
     }
 
+    static func updateInvoice(apiBase: String, token: String, request: UpdateInvoiceRequest) async throws -> CreateInvoiceResponse {
+        try await post(apiBase: apiBase, token: token, path: "/update_invoice.php", body: request)
+    }
+
+    static func deleteInvoice(apiBase: String, token: String, request: DeleteInvoiceRequest) async throws -> BasicResponse {
+        try await post(apiBase: apiBase, token: token, path: "/delete_invoice.php", body: request)
+    }
+
     static func checkStatus(apiBase: String, token: String, orderCode: String) async throws -> StatusResponse {
         let encoded = orderCode.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? orderCode
         return try await get(apiBase: apiBase, token: token, path: "/status.php?order_code=\(encoded)")
