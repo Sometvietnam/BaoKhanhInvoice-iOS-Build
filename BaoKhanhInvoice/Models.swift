@@ -4,24 +4,61 @@ struct LocalInvoiceItem: Identifiable, Equatable {
     let id = UUID()
     var name: String
     var priceText: String
-    var quantity: Int = 1
+    var quantityText: String = "1"
 
     var price: Int {
         Money.parse(priceText)
     }
 
+    var quantity: Double {
+        Quantity.parse(quantityText)
+    }
+
+    var safeQuantity: Double {
+        max(0.000001, quantity)
+    }
+
     var lineTotal: Int {
-        max(1, quantity) * price
+        Int((safeQuantity * Double(price)).rounded())
     }
 }
 
 struct SavedInvoiceItem: Codable, Equatable {
     var name: String
-    var quantity: Int
+    var quantity: Double
     var price: Int
 
+    enum CodingKeys: String, CodingKey {
+        case name, quantity, price
+    }
+
+    init(name: String, quantity: Double, price: Int) {
+        self.name = name
+        self.quantity = quantity
+        self.price = price
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        name = (try? c.decode(String.self, forKey: .name)) ?? ""
+        if let d = try? c.decode(Double.self, forKey: .quantity) {
+            quantity = d
+        } else if let i = try? c.decode(Int.self, forKey: .quantity) {
+            quantity = Double(i)
+        } else if let s = try? c.decode(String.self, forKey: .quantity) {
+            quantity = Quantity.parse(s)
+        } else {
+            quantity = 1
+        }
+        price = (try? c.decode(Int.self, forKey: .price)) ?? 0
+    }
+
+    var safeQuantity: Double {
+        max(0.000001, quantity)
+    }
+
     var lineTotal: Int {
-        max(1, quantity) * price
+        Int((safeQuantity * Double(price)).rounded())
     }
 }
 
@@ -69,7 +106,7 @@ struct SavedInvoiceRecord: Codable, Identifiable, Equatable {
             LocalInvoiceItem(
                 name: item.name,
                 priceText: String(item.price),
-                quantity: max(1, item.quantity)
+                quantityText: Quantity.format(item.quantity)
             )
         }
         return rows.isEmpty ? [LocalInvoiceItem(name: "", priceText: "")] : rows
@@ -99,7 +136,7 @@ struct DeleteInvoiceRequest: Encodable {
 
 struct CreateInvoiceItem: Encodable {
     let name: String
-    let quantity: Int
+    let quantity: Double
     let price: Int
 }
 
@@ -224,6 +261,50 @@ enum APIError: Error, LocalizedError {
         case .invalidResponse:
             return "Dữ liệu API trả về không hợp lệ."
         }
+    }
+}
+
+
+enum Quantity {
+    static func sanitizeInput(_ value: String) -> String {
+        var result = ""
+        var hasSeparator = false
+
+        for ch in value {
+            if ch.isNumber {
+                result.append(ch)
+            } else if ch == "," || ch == "." {
+                if !hasSeparator {
+                    if result.isEmpty { result = "0" }
+                    result.append(ch)
+                    hasSeparator = true
+                }
+            }
+        }
+
+        return result
+    }
+
+    static func parse(_ value: String) -> Double {
+        let cleaned = sanitizeInput(value)
+            .replacingOccurrences(of: ",", with: ".")
+
+        guard let amount = Double(cleaned), amount > 0 else {
+            return 1
+        }
+        return amount
+    }
+
+    static func format(_ value: Double) -> String {
+        let amount = max(0.000001, value)
+        let formatter = NumberFormatter()
+        formatter.locale = Locale(identifier: "vi_VN")
+        formatter.numberStyle = .decimal
+        formatter.groupingSeparator = "."
+        formatter.decimalSeparator = ","
+        formatter.minimumFractionDigits = 0
+        formatter.maximumFractionDigits = 3
+        return formatter.string(from: NSNumber(value: amount)) ?? "1"
     }
 }
 
