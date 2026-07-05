@@ -31,6 +31,7 @@ struct SavedInvoiceRecord: Codable, Identifiable, Equatable {
     var order_code: String
     var invoice_date_vn: String?
     var customer_name: String
+    var customer_phone: String?
     var items: [SavedInvoiceItem]
     var subtotal: Int
     var discount: Int
@@ -57,7 +58,9 @@ struct SavedInvoiceRecord: Codable, Identifiable, Equatable {
             payment_status: payment_status,
             status_text: status_text,
             paid_at: nil,
-            paid_at_vn: paid_at_vn
+            paid_at_vn: paid_at_vn,
+            customer_name: customer_name,
+            customer_phone: customer_phone
         )
     }
 
@@ -75,6 +78,7 @@ struct SavedInvoiceRecord: Codable, Identifiable, Equatable {
 
 struct CreateInvoiceRequest: Encodable {
     let customer_name: String
+    let customer_phone: String
     let discount: Int
     let items: [CreateInvoiceItem]
 }
@@ -83,6 +87,7 @@ struct UpdateInvoiceRequest: Encodable {
     let invoice_code: String
     let order_code: String
     let customer_name: String
+    let customer_phone: String
     let discount: Int
     let items: [CreateInvoiceItem]
 }
@@ -120,6 +125,8 @@ struct InvoiceInfo: Decodable, Equatable {
     let invoice_code: String
     let order_code: String
     let invoice_date_vn: String?
+    let customer_name: String?
+    let customer_phone: String?
     let subtotal: Int?
     let discount: Int?
     let total_amount: Int
@@ -129,7 +136,7 @@ struct InvoiceInfo: Decodable, Equatable {
     let paid_at_vn: String?
 
     enum CodingKeys: String, CodingKey {
-        case id, invoice_code, order_code, invoice_date_vn, subtotal, discount, total_amount, payment_status, status_text, paid_at, paid_at_vn
+        case id, invoice_code, order_code, invoice_date_vn, customer_name, customer_phone, subtotal, discount, total_amount, payment_status, status_text, paid_at, paid_at_vn
     }
 
     init(
@@ -143,12 +150,16 @@ struct InvoiceInfo: Decodable, Equatable {
         payment_status: String,
         status_text: String?,
         paid_at: String?,
-        paid_at_vn: String?
+        paid_at_vn: String?,
+        customer_name: String? = nil,
+        customer_phone: String? = nil
     ) {
         self.id = id
         self.invoice_code = invoice_code
         self.order_code = order_code
         self.invoice_date_vn = invoice_date_vn
+        self.customer_name = customer_name
+        self.customer_phone = customer_phone
         self.subtotal = subtotal
         self.discount = discount
         self.total_amount = total_amount
@@ -170,6 +181,8 @@ struct InvoiceInfo: Decodable, Equatable {
             order_code = ""
         }
         invoice_date_vn = try? c.decodeIfPresent(String.self, forKey: .invoice_date_vn)
+        customer_name = try? c.decodeIfPresent(String.self, forKey: .customer_name)
+        customer_phone = try? c.decodeIfPresent(String.self, forKey: .customer_phone)
         subtotal = try? c.decodeIfPresent(Int.self, forKey: .subtotal)
         discount = try? c.decodeIfPresent(Int.self, forKey: .discount)
         total_amount = (try? c.decode(Int.self, forKey: .total_amount)) ?? 0
@@ -183,6 +196,18 @@ struct InvoiceInfo: Decodable, Equatable {
 struct StatusResponse: Decodable {
     let success: Bool
     let invoice: InvoiceInfo
+}
+
+struct CustomerContact: Identifiable, Equatable {
+    var id: String { key }
+    let key: String
+    var name: String
+    var phone: String
+    var totalAmount: Int
+    var paidAmount: Int
+    var invoiceCount: Int
+    var paidInvoiceCount: Int
+    var lastPurchaseText: String
 }
 
 enum APIError: Error, LocalizedError {
