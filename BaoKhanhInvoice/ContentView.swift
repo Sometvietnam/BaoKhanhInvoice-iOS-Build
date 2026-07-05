@@ -8,6 +8,8 @@ struct ContentView: View {
 
     @State private var selectedTab: Int = 0
     @State private var customerName: String = "Khách lẻ"
+    @State private var customerPhone: String = ""
+    @State private var contactSearchText: String = ""
     @State private var discountText: String = ""
     @State private var items: [LocalInvoiceItem] = [LocalInvoiceItem(name: "", priceText: "")]
 
@@ -67,6 +69,38 @@ struct ContentView: View {
         savedInvoices.filter { $0.isPaid }
     }
 
+    private var customerContacts: [CustomerContact] {
+        makeCustomerContacts()
+    }
+
+    private var filteredContacts: [CustomerContact] {
+        let q = normalizedLookupText(contactSearchText)
+        if q.isEmpty { return customerContacts }
+        return customerContacts.filter { contact in
+            let name = normalizedLookupText(contact.name)
+            let phone = normalizedLookupText(contact.phone)
+            let initText = initialsText(contact.name)
+            return name.contains(q) || phone.contains(q) || initText.hasPrefix(q)
+        }
+    }
+
+    private var contactSuggestions: [CustomerContact] {
+        let q = normalizedLookupText(customerName)
+        guard q.count >= 1 else { return [] }
+        let exactSelected = customerContacts.contains { contact in
+            normalizedLookupText(contact.name) == q && digitsOnly(contact.phone) == digitsOnly(customerPhone)
+        }
+        if exactSelected { return [] }
+        return customerContacts.filter { contact in
+            let name = normalizedLookupText(contact.name)
+            let phone = normalizedLookupText(contact.phone)
+            let initText = initialsText(contact.name)
+            return name.hasPrefix(q) || name.contains(q) || initText.hasPrefix(q) || (!phone.isEmpty && phone.contains(q))
+        }
+        .prefix(5)
+        .map { $0 }
+    }
+
     var body: some View {
         TabView(selection: $selectedTab) {
             createInvoiceTab
@@ -77,9 +111,13 @@ struct ContentView: View {
                 .tabItem { Label("Lịch sử", systemImage: "clock.arrow.circlepath") }
                 .tag(1)
 
+            contactsTab
+                .tabItem { Label("Danh bạ", systemImage: "person.crop.circle.badge.checkmark") }
+                .tag(2)
+
             revenueTab
                 .tabItem { Label("Doanh thu", systemImage: "chart.bar.xaxis") }
-                .tag(2)
+                .tag(3)
         }
         .onAppear {
             loadSavedInvoices()
@@ -173,6 +211,56 @@ struct ContentView: View {
         }
     }
 
+    private var contactsTab: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 14) {
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("Danh bạ khách hàng")
+                            .font(.headline)
+
+                        TextField("Tìm tên hoặc SĐT khách hàng", text: $contactSearchText)
+                            .textFieldStyle(.roundedBorder)
+                            .focused($inputFocused)
+
+                        HStack(spacing: 10) {
+                            MiniStatBox(title: "Tổng khách", value: "\(customerContacts.count)", color: .blue)
+                            MiniStatBox(title: "Tổng đã mua", value: Money.format(customerContacts.reduce(0) { $0 + $1.totalAmount }), color: .green)
+                        }
+
+                        Text("Danh bạ được tự động lưu từ tên và SĐT khi tạo hóa đơn. Khi tạo đơn mới, gõ chữ cái đầu của tên khách hàng để chọn gợi ý; app chỉ tự điền Tên và SĐT, không điền sản phẩm.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                    .cardStyle()
+
+                    if filteredContacts.isEmpty {
+                        Text("Chưa có khách hàng trong danh bạ.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding()
+                            .background(Color(.systemBackground))
+                            .clipShape(RoundedRectangle(cornerRadius: 14))
+                    } else {
+                        VStack(spacing: 10) {
+                            ForEach(filteredContacts) { contact in
+                                CustomerContactRow(contact: contact) {
+                                    selectContact(contact)
+                                    selectedTab = 0
+                                }
+                            }
+                        }
+                    }
+                }
+                .padding()
+            }
+            .scrollDismissesKeyboard(.interactively)
+            .background(Color(.systemGroupedBackground).onTapGesture { hideKeyboard() })
+            .navigationTitle("Danh bạ")
+        }
+    }
+
     private var revenueTab: some View {
         NavigationStack {
             ScrollView {
@@ -233,6 +321,17 @@ struct ContentView: View {
             TextField("Khách hàng", text: $customerName)
                 .textFieldStyle(.roundedBorder)
                 .focused($inputFocused)
+
+            TextField("SĐT khách hàng", text: $customerPhone)
+                .keyboardType(.phonePad)
+                .textFieldStyle(.roundedBorder)
+                .focused($inputFocused)
+
+            if !contactSuggestions.isEmpty {
+                ContactSuggestionList(contacts: contactSuggestions) { contact in
+                    selectContact(contact)
+                }
+            }
 
             VStack(spacing: 10) {
                 ForEach($items) { $item in
@@ -361,6 +460,7 @@ struct ContentView: View {
     private var invoiceCard: some View {
         InvoiceCardView(
             customerName: customerName.isEmpty ? "Khách lẻ" : customerName,
+            customerPhone: normalizedCustomerPhone,
             items: validItems,
             currentInvoice: currentInvoice,
             qrText: qrText,
@@ -407,6 +507,7 @@ struct ContentView: View {
 
         let request = CreateInvoiceRequest(
             customer_name: normalizedCustomerName,
+            customer_phone: normalizedCustomerPhone,
             discount: discount,
             items: rows.map { CreateInvoiceItem(name: $0.name.isEmpty ? "Sản phẩm" : $0.name, quantity: max(1, $0.quantity), price: $0.price) }
         )
@@ -444,6 +545,7 @@ struct ContentView: View {
             invoice_code: invoice.invoice_code,
             order_code: invoice.order_code,
             customer_name: normalizedCustomerName,
+            customer_phone: normalizedCustomerPhone,
             discount: discount,
             items: rows.map { CreateInvoiceItem(name: $0.name.isEmpty ? "Sản phẩm" : $0.name, quantity: max(1, $0.quantity), price: $0.price) }
         )
@@ -477,6 +579,10 @@ struct ContentView: View {
 
     private var normalizedCustomerName: String {
         customerName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Khách lẻ" : customerName.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private var normalizedCustomerPhone: String {
+        customerPhone.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private func startPolling(orderCode: String) {
@@ -528,6 +634,7 @@ struct ContentView: View {
         pollTask?.cancel()
         editingInvoiceCode = nil
         customerName = "Khách lẻ"
+        customerPhone = ""
         discountText = ""
         items = [LocalInvoiceItem(name: "", priceText: "")]
         currentInvoice = nil
@@ -560,6 +667,7 @@ struct ContentView: View {
             order_code: invoice.order_code,
             invoice_date_vn: invoice.invoice_date_vn ?? invoiceDateText,
             customer_name: normalizedCustomerName,
+            customer_phone: normalizedCustomerPhone,
             items: validItems.map { SavedInvoiceItem(name: $0.name.isEmpty ? "Sản phẩm" : $0.name, quantity: max(1, $0.quantity), price: $0.price) },
             subtotal: subtotal,
             discount: discount,
@@ -610,13 +718,16 @@ struct ContentView: View {
             payment_status: invoice.payment_status,
             status_text: invoice.status_text,
             paid_at: invoice.paid_at,
-            paid_at_vn: invoice.paid_at_vn
+            paid_at_vn: invoice.paid_at_vn,
+            customer_name: current.customer_name,
+            customer_phone: current.customer_phone
         )
     }
 
     private func openInvoiceFromHistory(_ record: SavedInvoiceRecord) {
         hideKeyboard()
         customerName = record.customer_name
+        customerPhone = record.customer_phone ?? ""
         discountText = record.discount > 0 ? String(record.discount) : ""
         items = record.toLocalItems()
         currentInvoice = record.toInvoiceInfo()
@@ -663,6 +774,7 @@ struct ContentView: View {
 
         let printable = InvoiceCardView(
             customerName: customerName.isEmpty ? "Khách lẻ" : customerName,
+            customerPhone: normalizedCustomerPhone,
             items: validItems,
             currentInvoice: currentInvoice,
             qrText: qrText,
@@ -685,6 +797,72 @@ struct ContentView: View {
 
         UIImageWriteToSavedPhotosAlbum(image, nil, nil, nil)
         statusMessage = "Đã lưu ảnh hóa đơn vào Ảnh trên iPhone."
+    }
+
+    private func selectContact(_ contact: CustomerContact) {
+        customerName = contact.name
+        customerPhone = contact.phone
+        statusMessage = "Đã chọn khách \(contact.name). App chỉ tự điền tên và SĐT, không thay đổi sản phẩm."
+        hideKeyboard()
+    }
+
+    private func makeCustomerContacts() -> [CustomerContact] {
+        var buckets: [String: CustomerContact] = [:]
+        for record in savedInvoices {
+            let name = record.customer_name.trimmingCharacters(in: .whitespacesAndNewlines)
+            let phone = (record.customer_phone ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            if name.isEmpty && phone.isEmpty { continue }
+            if normalizedLookupText(name) == normalizedLookupText("Khách lẻ") && phone.isEmpty { continue }
+            let key = contactKey(name: name, phone: phone)
+            let displayName = name.isEmpty ? "Khách chưa đặt tên" : name
+            let old = buckets[key]
+            buckets[key] = CustomerContact(
+                key: key,
+                name: old?.name ?? displayName,
+                phone: old?.phone ?? phone,
+                totalAmount: (old?.totalAmount ?? 0) + record.total_amount,
+                paidAmount: (old?.paidAmount ?? 0) + (record.isPaid ? record.total_amount : 0),
+                invoiceCount: (old?.invoiceCount ?? 0) + 1,
+                paidInvoiceCount: (old?.paidInvoiceCount ?? 0) + (record.isPaid ? 1 : 0),
+                lastPurchaseText: maxDateText(old?.lastPurchaseText, record.saved_at)
+            )
+        }
+        return buckets.values.sorted { a, b in
+            if a.lastPurchaseText != b.lastPurchaseText { return a.lastPurchaseText > b.lastPurchaseText }
+            return a.name.localizedCaseInsensitiveCompare(b.name) == .orderedAscending
+        }
+    }
+
+    private func contactKey(name: String, phone: String) -> String {
+        let digits = digitsOnly(phone)
+        if !digits.isEmpty { return "phone:" + digits }
+        return "name:" + normalizedLookupText(name)
+    }
+
+    private func digitsOnly(_ text: String) -> String {
+        text.filter { $0.isNumber }
+    }
+
+    private func normalizedLookupText(_ text: String) -> String {
+        text
+            .folding(options: [.diacriticInsensitive, .caseInsensitive], locale: Locale(identifier: "vi_VN"))
+            .lowercased()
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func initialsText(_ text: String) -> String {
+        normalizedLookupText(text)
+            .split(whereSeparator: { $0 == " " || $0 == "-" || $0 == "." })
+            .compactMap { $0.first }
+            .map { String($0) }
+            .joined()
+    }
+
+    private func maxDateText(_ a: String?, _ b: String) -> String {
+        guard let a, !a.isEmpty else { return b }
+        let da = Self.fullFormatter.date(from: a) ?? .distantPast
+        let db = Self.fullFormatter.date(from: b) ?? .distantPast
+        return db > da ? b : a
     }
 
     private func dateForInvoice(_ record: SavedInvoiceRecord) -> Date? {
@@ -782,6 +960,12 @@ private struct HistoryInvoiceRow: View {
                     .foregroundStyle(statusColor)
             }
 
+            if let phone = record.customer_phone, !phone.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                Text("SĐT: \(phone)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             HStack {
                 Text(record.invoice_code)
                     .font(.caption)
@@ -829,6 +1013,105 @@ private struct HistoryInvoiceRow: View {
         .onTapGesture {
             onOpen()
         }
+    }
+}
+
+private struct ContactSuggestionList: View {
+    let contacts: [CustomerContact]
+    let onSelect: (CustomerContact) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("Gợi ý khách hàng")
+                .font(.caption.bold())
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 10)
+                .padding(.top, 8)
+            ForEach(contacts) { contact in
+                Button {
+                    onSelect(contact)
+                } label: {
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(contact.name)
+                                .font(.subheadline.bold())
+                                .foregroundStyle(.primary)
+                            Text(contact.phone.isEmpty ? "Chưa có SĐT" : contact.phone)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Text(Money.format(contact.totalAmount))
+                            .font(.caption.bold())
+                            .foregroundStyle(.green)
+                    }
+                    .padding(10)
+                }
+                .buttonStyle(.plain)
+                if contact.id != contacts.last?.id { Divider() }
+            }
+        }
+        .background(Color(.secondarySystemGroupedBackground))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+    }
+}
+
+private struct CustomerContactRow: View {
+    let contact: CustomerContact
+    let onSelect: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(contact.name)
+                        .font(.headline)
+                    Text(contact.phone.isEmpty ? "Chưa có SĐT" : contact.phone)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Button("Chọn") {
+                    onSelect()
+                }
+                .buttonStyle(.bordered)
+            }
+            HStack(spacing: 10) {
+                MiniAmountPill(title: "Tổng mua", amount: contact.totalAmount, color: .green)
+                MiniAmountPill(title: "Đã thanh toán", amount: contact.paidAmount, color: .blue)
+            }
+            Text("\(contact.invoiceCount) hóa đơn · \(contact.paidInvoiceCount) đã thanh toán · Lần gần nhất: \(contact.lastPurchaseText)")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding(12)
+        .background(Color(.systemBackground))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14)
+                .stroke(Color(.separator), lineWidth: 0.6)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+    }
+}
+
+private struct MiniAmountPill: View {
+    let title: String
+    let amount: Int
+    let color: Color
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+            Text(Money.format(amount))
+                .font(.caption.bold())
+                .foregroundStyle(color)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(8)
+        .background(color.opacity(0.10))
+        .clipShape(RoundedRectangle(cornerRadius: 10))
     }
 }
 
@@ -891,6 +1174,7 @@ private struct MiniStatBox: View {
 
 private struct InvoiceCardView: View {
     let customerName: String
+    let customerPhone: String
     let items: [LocalInvoiceItem]
     let currentInvoice: InvoiceInfo?
     let qrText: String?
@@ -921,6 +1205,9 @@ private struct InvoiceCardView: View {
                     Text("Số HĐ: \(currentInvoice?.invoice_code ?? "Chưa tạo")")
                     Text("Ngày: \(invoiceDateText)")
                     Text("Khách hàng: \(customerName.isEmpty ? "Khách lẻ" : customerName)")
+                    if !customerPhone.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        Text("SĐT: \(customerPhone)")
+                    }
                 }
                 .font(.subheadline)
                 Spacer()
