@@ -41,6 +41,10 @@ struct SavedInvoiceRecord: Codable, Identifiable, Equatable {
     var qr_text: String?
     var saved_at: String
 
+    var isPaid: Bool {
+        payment_status.uppercased() == "PAID"
+    }
+
     func toInvoiceInfo() -> InvoiceInfo {
         InvoiceInfo(
             id: nil,
@@ -75,6 +79,19 @@ struct CreateInvoiceRequest: Encodable {
     let items: [CreateInvoiceItem]
 }
 
+struct UpdateInvoiceRequest: Encodable {
+    let invoice_code: String
+    let order_code: String
+    let customer_name: String
+    let discount: Int
+    let items: [CreateInvoiceItem]
+}
+
+struct DeleteInvoiceRequest: Encodable {
+    let invoice_code: String
+    let order_code: String
+}
+
 struct CreateInvoiceItem: Encodable {
     let name: String
     let quantity: Int
@@ -85,6 +102,11 @@ struct CreateInvoiceResponse: Decodable {
     let success: Bool
     let invoice: InvoiceInfo
     let payment: PaymentInfo
+}
+
+struct BasicResponse: Decodable {
+    let success: Bool
+    let message: String?
 }
 
 struct PaymentInfo: Decodable {
