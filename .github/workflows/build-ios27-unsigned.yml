@@ -421,7 +421,7 @@ jobs:
           bWFnZQogICAgfScnJykKCnByaW50KCJpT1MgMjcgcGVyZm9ybWFuY2UgcGF0Y2ggYXBwbGllZCBz
           dWNjZXNzZnVsbHkiKQo=
           B64
-          base64 --decode /tmp/apply_ios27_fix.b64 > /tmp/apply_ios27_fix.py
+          base64 --decode -i /tmp/apply_ios27_fix.b64 -o /tmp/apply_ios27_fix.py
           python3 /tmp/apply_ios27_fix.py
 
       - name: Verify optimized source markers
